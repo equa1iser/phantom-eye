@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ server_name }} ◈ Security Dashboard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@400;500;600;700&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/dashboard.css">
+</head>
+
+<body>
+    <!-- Scanline overlay -->
+    <div class="scanlines"></div>
+
+    <!-- ── Header ──────────────────────────────────────────────────────────── -->
+    <header class="hud-header">
+        <div class="hud-header__left">
+            <span class="logo-mark">◈</span>
+            <div class="logo-text">
+                <span class="logo-name">PHANTOM EYE</span>
+                <span class="logo-sub">SECURITY ARRAY</span>
+            </div>
+        </div>
+        <nav class="hud-nav">
+            <button class="nav-btn active" data-view="grid">⊞ GRID</button>
+            <button class="nav-btn" data-view="focus">◎ FOCUS</button>
+            <button class="nav-btn" data-view="alerts">⚠ ALERTS <span id="alert-badge"
+                    class="badge hidden">0</span></button>
+            <button class="nav-btn" data-view="settings">⚙ CONFIG</button>
+        </nav>
+        <div class="hud-header__right">
+            <div class="status-cluster">
+                <div class="status-item">
+                    <span class="dot dot--green pulse"></span>
+                    <span id="stat-online">0</span>/<span id="stat-total">0</span> CAMS
+                </div>
+                <div class="status-item" id="ai-status-indicator" title="AI Detection">
+                    <span class="dot dot--cyan" id="ai-dot"></span>
+                    <span>AI</span>
+                </div>
+                <div class="status-item">
+                    <span id="clock">00:00:00</span>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- ── Main content ─────────────────────────────────────────────────────── -->
+    <main id="main-content">
+
+        <!-- GRID VIEW -->
+        <section id="view-grid" class="view active">
+            <div class="grid-toolbar">
+                <div class="toolbar-left">
+                    <button class="tool-btn" id="btn-add-cam">+ ADD CAMERA</button>
+                    <button class="tool-btn" id="btn-discover">⊙ AUTO-DISCOVER</button>
+                </div>
+                <div class="toolbar-right">
+                    <label class="toggle-group">
+                        <span>AI DETECT</span>
+                        <div class="toggle" id="toggle-ai">
+                            <div class="toggle-knob"></div>
+                        </div>
+                    </label>
+                    <label class="toggle-group">
+                        <span>MOTION</span>
+                        <div class="toggle" id="toggle-motion">
+                            <div class="toggle-knob"></div>
+                        </div>
+                    </label>
+                </div>
+            </div>
+            <div id="camera-grid" class="camera-grid">
+                <div class="empty-state" id="empty-state">
+                    <span class="empty-icon">◉</span>
+                    <p>NO CAMERAS REGISTERED</p>
+                    <p class="empty-sub">Add a camera or run auto-discover to get started.</p>
+                    <button class="tool-btn tool-btn--accent" onclick="openAddCam()">+ ADD CAMERA</button>
+                </div>
+            </div>
+        </section>
+
+        <!-- FOCUS VIEW -->
+        <section id="view-focus" class="view">
+            <div class="focus-container">
+                <div class="focus-main">
+                    <img id="focus-stream" src="" alt="Focus View" class="focus-img">
+                    <div class="focus-overlay">
+                        <div class="focus-name" id="focus-name">—</div>
+                        <div class="focus-detections" id="focus-detections"></div>
+                    </div>
+                </div>
+                <div class="focus-sidebar">
+                    <div class="sidebar-section">
+                        <div class="sidebar-label">CAMERA SELECT</div>
+                        <div id="focus-cam-list" class="focus-cam-list"></div>
+                    </div>
+                    <div class="sidebar-section">
+                        <div class="sidebar-label">DETECTIONS</div>
+                        <div id="focus-det-list" class="det-list"></div>
+                    </div>
+                    <div class="sidebar-section">
+                        <div class="sidebar-label">SNAPSHOT</div>
+                        <button class="tool-btn" id="btn-snapshot">📸 CAPTURE</button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ALERTS VIEW -->
+        <section id="view-alerts" class="view">
+            <div class="alerts-toolbar">
+                <h2 class="section-title">ALERT LOG</h2>
+                <button class="tool-btn tool-btn--danger" id="btn-clear-alerts">✕ CLEAR ALL</button>
+            </div>
+            <div id="alert-list" class="alert-list">
+                <div class="empty-state">
+                    <span class="empty-icon">✓</span>
+                    <p>NO ALERTS</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- SETTINGS VIEW -->
+        <section id="view-settings" class="view">
+            <div class="settings-grid">
+                <div class="settings-card">
+                    <div class="card-title">AI DETECTION</div>
+                    <div class="setting-row">
+                        <label>Model</label>
+                        <select id="set-ai-model" class="set-input">
+                            <option value="yolov8n.pt">YOLOv8 Nano (fastest)</option>
+                            <option value="yolov8s.pt">YOLOv8 Small (balanced)</option>
+                            <option value="yolov8m.pt">YOLOv8 Medium (accurate)</option>
+                        </select>
+                    </div>
+                    <div class="setting-row">
+                        <label>Confidence threshold</label>
+                        <input type="range" id="set-confidence" min="10" max="95" step="5" class="set-range">
+                        <span id="set-confidence-val">50%</span>
+                    </div>
+                    <div class="setting-row">
+                        <label>Alert on classes (comma separated)</label>
+                        <input type="text" id="set-alert-classes" class="set-input" placeholder="person, car, dog">
+                    </div>
+                    <div class="setting-row">
+                        <label>Alert cooldown (seconds)</label>
+                        <input type="number" id="set-alert-cooldown" class="set-input" min="5" max="3600">
+                    </div>
+                </div>
+
+                <div class="settings-card">
+                    <div class="card-title">MOTION DETECTION</div>
+                    <div class="setting-row">
+                        <label>Sensitivity</label>
+                        <input type="range" id="set-motion-sens" min="1" max="100" class="set-range">
+                        <span id="set-motion-val">25</span>
+                    </div>
+                </div>
+
+                <div class="settings-card">
+                    <div class="card-title">SYSTEM</div>
+                    <div class="setting-row">
+                        <label>Server name</label>
+                        <input type="text" id="set-server-name" class="set-input">
+                    </div>
+                    <div class="setting-row">
+                        <label>Snapshot on alert</label>
+                        <div class="toggle" id="toggle-snap">
+                            <div class="toggle-knob"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="settings-card">
+                    <div class="card-title">AI STATUS</div>
+                    <div id="ai-install-status" class="code-block">
+                        Checking...
+                    </div>
+                    <button class="tool-btn tool-btn--accent" id="btn-save-settings" style="margin-top:1rem">
+                        SAVE SETTINGS
+                    </button>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- ── Add Camera Modal ──────────────────────────────────────────────────── -->
+    <div id="modal-add-cam" class="modal hidden">
+        <div class="modal-box">
+            <div class="modal-title">◈ ADD CAMERA</div>
+            <label class="modal-label">Camera Name</label>
+            <input id="new-cam-name" class="modal-input" placeholder="e.g. Front Door">
+            <label class="modal-label">MJPEG Stream URL</label>
+            <input id="new-cam-url" class="modal-input" placeholder="http://192.168.1.xxx/stream">
+            <div class="modal-hint">
+                The ESP32-CAM streams at: <code>http://&lt;camera-ip&gt;/stream</code>
+            </div>
+            <div class="modal-actions">
+                <button class="tool-btn" id="btn-modal-cancel">CANCEL</button>
+                <button class="tool-btn tool-btn--accent" id="btn-modal-save">ADD CAMERA</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Discover Modal ────────────────────────────────────────────────────── -->
+    <div id="modal-discover" class="modal hidden">
+        <div class="modal-box">
+            <div class="modal-title">⊙ AUTO-DISCOVER CAMERAS</div>
+            <label class="modal-label">Subnet to scan</label>
+            <input id="discover-subnet" class="modal-input" value="192.168.1">
+            <div class="modal-hint">Scans x.x.x.1–254 for Phantom Eye cameras. Takes ~5 seconds.</div>
+            <div id="discover-results" class="discover-results hidden"></div>
+            <div class="modal-actions">
+                <button class="tool-btn" id="btn-discover-cancel">CANCEL</button>
+                <button class="tool-btn tool-btn--accent" id="btn-discover-scan">SCAN NETWORK</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Toast notification ────────────────────────────────────────────────── -->
+    <div id="toast" class="toast hidden"></div>
+
+    <script src="/static/js/dashboard.js"></script>
+</body>
+
+</html>

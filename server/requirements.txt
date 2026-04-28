@@ -1,0 +1,8 @@
+flask>=3.0
+flask-cors>=4.0
+requests>=2.31
+opencv-python-headless>=4.8
+numpy>=1.24
+# Optional AI detection (install separately if you want YOLO):
+# ultralytics>=8.0
+ 
