@@ -3,18 +3,21 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
     <title>{{ server_name }} ◈ Security Dashboard</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link
-        href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@400;500;600;700&display=swap"
+    <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@400;600;700&display=swap"
         rel="stylesheet">
     <link rel="stylesheet" href="/static/css/dashboard.css">
 </head>
 
 <body>
-    <!-- Scanline overlay -->
     <div class="scanlines"></div>
+
+    <!-- ── Mobile hamburger ──────────────────────────────────────────────────── -->
+    <button class="hamburger" id="hamburger" aria-label="Menu">
+        <span></span><span></span><span></span>
+    </button>
 
     <!-- ── Header ──────────────────────────────────────────────────────────── -->
     <header class="hud-header">
@@ -25,97 +28,145 @@
                 <span class="logo-sub">SECURITY ARRAY</span>
             </div>
         </div>
-        <nav class="hud-nav">
+
+        <nav class="hud-nav" id="hud-nav">
             <button class="nav-btn active" data-view="grid">⊞ GRID</button>
             <button class="nav-btn" data-view="focus">◎ FOCUS</button>
             <button class="nav-btn" data-view="alerts">⚠ ALERTS <span id="alert-badge"
                     class="badge hidden">0</span></button>
             <button class="nav-btn" data-view="settings">⚙ CONFIG</button>
         </nav>
+
         <div class="hud-header__right">
             <div class="status-cluster">
                 <div class="status-item">
                     <span class="dot dot--green pulse"></span>
-                    <span id="stat-online">0</span>/<span id="stat-total">0</span> CAMS
-                </div>
-                <div class="status-item" id="ai-status-indicator" title="AI Detection">
-                    <span class="dot dot--cyan" id="ai-dot"></span>
-                    <span>AI</span>
+                    <span id="stat-online">0</span>/<span id="stat-total">0</span>
+                    <span class="stat-label"> CAMS</span>
                 </div>
                 <div class="status-item">
-                    <span id="clock">00:00:00</span>
+                    <span class="dot" id="ai-dot"></span>
+                    <span class="stat-label">AI</span>
+                </div>
+                <div class="status-item" id="clock-item">
+                    <span id="clock">--:--:--</span>
                 </div>
             </div>
         </div>
     </header>
 
-    <!-- ── Main content ─────────────────────────────────────────────────────── -->
+    <!-- ── Main ─────────────────────────────────────────────────────────────── -->
     <main id="main-content">
 
-        <!-- GRID VIEW -->
+        <!-- ══ GRID VIEW ══════════════════════════════════════════════════════ -->
         <section id="view-grid" class="view active">
             <div class="grid-toolbar">
                 <div class="toolbar-left">
-                    <button class="tool-btn" id="btn-add-cam">+ ADD CAMERA</button>
-                    <button class="tool-btn" id="btn-discover">⊙ AUTO-DISCOVER</button>
+                    <button class="tool-btn" id="btn-add-cam">+ ADD</button>
+                    <button class="tool-btn" id="btn-discover">⊙ DISCOVER</button>
                 </div>
                 <div class="toolbar-right">
                     <label class="toggle-group">
-                        <span>AI DETECT</span>
+                        <span class="tg-label">AI</span>
                         <div class="toggle" id="toggle-ai">
                             <div class="toggle-knob"></div>
                         </div>
                     </label>
                     <label class="toggle-group">
-                        <span>MOTION</span>
+                        <span class="tg-label">MOTION</span>
                         <div class="toggle" id="toggle-motion">
                             <div class="toggle-knob"></div>
                         </div>
                     </label>
                 </div>
             </div>
+
             <div id="camera-grid" class="camera-grid">
                 <div class="empty-state" id="empty-state">
                     <span class="empty-icon">◉</span>
                     <p>NO CAMERAS REGISTERED</p>
-                    <p class="empty-sub">Add a camera or run auto-discover to get started.</p>
+                    <p class="empty-sub">Add a camera or run auto-discover.</p>
                     <button class="tool-btn tool-btn--accent" onclick="openAddCam()">+ ADD CAMERA</button>
                 </div>
             </div>
         </section>
 
-        <!-- FOCUS VIEW -->
+        <!-- ══ FOCUS VIEW ═════════════════════════════════════════════════════ -->
         <section id="view-focus" class="view">
             <div class="focus-container">
+                <!-- Main stream -->
                 <div class="focus-main">
-                    <img id="focus-stream" src="" alt="Focus View" class="focus-img">
-                    <div class="focus-overlay">
-                        <div class="focus-name" id="focus-name">—</div>
-                        <div class="focus-detections" id="focus-detections"></div>
+                    <img id="focus-stream" src="" alt="Focus" class="focus-img">
+                    <div class="focus-hud-overlay">
+                        <div class="focus-name" id="focus-name">SELECT A CAMERA</div>
+                        <div class="focus-det-overlay" id="focus-det-overlay"></div>
                     </div>
                 </div>
-                <div class="focus-sidebar">
-                    <div class="sidebar-section">
-                        <div class="sidebar-label">CAMERA SELECT</div>
+
+                <!-- Sidebar -->
+                <aside class="focus-sidebar">
+                    <!-- Camera list -->
+                    <div class="sb-section">
+                        <div class="sb-label">CAMERAS</div>
                         <div id="focus-cam-list" class="focus-cam-list"></div>
                     </div>
-                    <div class="sidebar-section">
-                        <div class="sidebar-label">DETECTIONS</div>
-                        <div id="focus-det-list" class="det-list"></div>
+
+                    <!-- Controls -->
+                    <div class="sb-section">
+                        <div class="sb-label">CONTROLS</div>
+                        <div class="sb-controls">
+                            <button class="tool-btn sb-btn" id="btn-snapshot">📸 SNAPSHOT</button>
+                            <button class="tool-btn sb-btn" id="btn-record">⏺ RECORD</button>
+                            <button class="tool-btn sb-btn" id="btn-led">💡 LED OFF</button>
+                        </div>
                     </div>
-                    <div class="sidebar-section">
-                        <div class="sidebar-label">SNAPSHOT</div>
-                        <button class="tool-btn" id="btn-snapshot">📸 CAPTURE</button>
+
+                    <!-- Live detections -->
+                    <div class="sb-section">
+                        <div class="sb-label">LIVE DETECTIONS</div>
+                        <div id="focus-det-list" class="det-list">
+                            <span class="no-data">None</span>
+                        </div>
                     </div>
-                </div>
+
+                    <!-- History / Stats -->
+                    <div class="sb-section sb-section--grow">
+                        <div class="sb-label">
+                            HISTORY
+                            <button class="sb-label-btn" id="btn-history-refresh">↻</button>
+                        </div>
+                        <div class="history-filter">
+                            <input type="date" id="hist-from" class="date-input" title="From date">
+                            <span style="color:var(--mut);font-size:.7rem">→</span>
+                            <input type="date" id="hist-to" class="date-input" title="To date">
+                        </div>
+                        <div class="stat-cards">
+                            <div class="stat-card">
+                                <span class="stat-val" id="stat-detections">0</span>
+                                <span class="stat-key">DETECTIONS</span>
+                            </div>
+                            <div class="stat-card">
+                                <span class="stat-val" id="stat-motion">0</span>
+                                <span class="stat-key">MOTION</span>
+                            </div>
+                        </div>
+                        <div id="class-breakdown" class="class-breakdown"></div>
+                        <div id="history-list" class="history-list"></div>
+                    </div>
+                </aside>
             </div>
         </section>
 
-        <!-- ALERTS VIEW -->
+        <!-- ══ ALERTS VIEW ════════════════════════════════════════════════════ -->
         <section id="view-alerts" class="view">
             <div class="alerts-toolbar">
                 <h2 class="section-title">ALERT LOG</h2>
-                <button class="tool-btn tool-btn--danger" id="btn-clear-alerts">✕ CLEAR ALL</button>
+                <div class="toolbar-right">
+                    <select id="alert-filter-cam" class="set-input set-input--sm">
+                        <option value="">All Cameras</option>
+                    </select>
+                    <button class="tool-btn tool-btn--danger" id="btn-clear-alerts">✕ CLEAR</button>
+                </div>
             </div>
             <div id="alert-list" class="alert-list">
                 <div class="empty-state">
@@ -125,72 +176,320 @@
             </div>
         </section>
 
-        <!-- SETTINGS VIEW -->
+        <!-- ══ SETTINGS VIEW ══════════════════════════════════════════════════ -->
         <section id="view-settings" class="view">
-            <div class="settings-grid">
-                <div class="settings-card">
-                    <div class="card-title">AI DETECTION</div>
-                    <div class="setting-row">
-                        <label>Model</label>
-                        <select id="set-ai-model" class="set-input">
-                            <option value="yolov8n.pt">YOLOv8 Nano (fastest)</option>
-                            <option value="yolov8s.pt">YOLOv8 Small (balanced)</option>
-                            <option value="yolov8m.pt">YOLOv8 Medium (accurate)</option>
-                        </select>
-                    </div>
-                    <div class="setting-row">
-                        <label>Confidence threshold</label>
-                        <input type="range" id="set-confidence" min="10" max="95" step="5" class="set-range">
-                        <span id="set-confidence-val">50%</span>
-                    </div>
-                    <div class="setting-row">
-                        <label>Alert on classes (comma separated)</label>
-                        <input type="text" id="set-alert-classes" class="set-input" placeholder="person, car, dog">
-                    </div>
-                    <div class="setting-row">
-                        <label>Alert cooldown (seconds)</label>
-                        <input type="number" id="set-alert-cooldown" class="set-input" min="5" max="3600">
-                    </div>
-                </div>
+            <!-- Settings tabs -->
+            <div class="settings-tabs">
+                <button class="stab active" data-stab="ai">AI DETECTION</button>
+                <button class="stab" data-stab="camera">CAMERA HW</button>
+                <button class="stab" data-stab="system">SYSTEM</button>
+                <button class="stab" data-stab="plugins">PLUGINS</button>
+                <button class="stab" data-stab="recordings">RECORDINGS</button>
+            </div>
 
-                <div class="settings-card">
-                    <div class="card-title">MOTION DETECTION</div>
-                    <div class="setting-row">
-                        <label>Sensitivity</label>
-                        <input type="range" id="set-motion-sens" min="1" max="100" class="set-range">
-                        <span id="set-motion-val">25</span>
+            <!-- AI tab -->
+            <div class="stab-panel active" id="stab-ai">
+                <div class="settings-grid">
+                    <div class="settings-card">
+                        <div class="card-title">MODEL</div>
+                        <div class="setting-row">
+                            <label>YOLO Model</label>
+                            <select id="set-ai-model" class="set-input">
+                                <option value="yolov8n.pt">YOLOv8 Nano — fastest</option>
+                                <option value="yolov8s.pt">YOLOv8 Small — balanced</option>
+                                <option value="yolov8m.pt">YOLOv8 Medium — accurate</option>
+                            </select>
+                        </div>
+                        <div class="setting-row">
+                            <label>Confidence <span id="set-confidence-val">50%</span></label>
+                            <input type="range" id="set-confidence" class="set-range" min="10" max="95" step="5">
+                        </div>
+                        <div class="setting-row">
+                            <label>Alert on these classes</label>
+                            <input type="text" id="set-alert-classes" class="set-input" placeholder="person, car, dog">
+                        </div>
+                        <div class="setting-row">
+                            <label>Alert cooldown (seconds)</label>
+                            <input type="number" id="set-alert-cooldown" class="set-input" min="5" max="3600">
+                        </div>
                     </div>
-                </div>
-
-                <div class="settings-card">
-                    <div class="card-title">SYSTEM</div>
-                    <div class="setting-row">
-                        <label>Server name</label>
-                        <input type="text" id="set-server-name" class="set-input">
-                    </div>
-                    <div class="setting-row">
-                        <label>Snapshot on alert</label>
-                        <div class="toggle" id="toggle-snap">
-                            <div class="toggle-knob"></div>
+                    <div class="settings-card">
+                        <div class="card-title">STATUS</div>
+                        <div id="ai-install-status" class="code-block">Checking...</div>
+                        <div class="setting-row" style="margin-top:.75rem">
+                            <label>Snapshot on alert</label>
+                            <div class="toggle" id="toggle-snap">
+                                <div class="toggle-knob"></div>
+                            </div>
                         </div>
                     </div>
                 </div>
+            </div>
 
-                <div class="settings-card">
-                    <div class="card-title">AI STATUS</div>
-                    <div id="ai-install-status" class="code-block">
-                        Checking...
+            <!-- Camera Hardware tab -->
+            <div class="stab-panel" id="stab-camera">
+                <div class="cam-hw-notice">
+                    Changes here push to <strong>all cameras</strong> immediately.
+                    Per-camera overrides available via the ⋮ menu on each camera cell.
+                </div>
+                <div class="settings-grid">
+                    <div class="settings-card">
+                        <div class="card-title">IMAGE</div>
+                        <div class="setting-row">
+                            <label>Resolution (Framesize)</label>
+                            <select id="hw-framesize" class="set-input">
+                                <option value="5">QVGA 320x240</option>
+                                <option value="6">CIF 400x296</option>
+                                <option value="7">HVGA 480x320</option>
+                                <option value="8" selected>VGA 640x480 (recommended)</option>
+                                <option value="9">SVGA 800x600</option>
+                                <option value="10">XGA 1024x768</option>
+                                <option value="13">UXGA 1600x1200</option>
+                            </select>
+                        </div>
+                        <div class="setting-row">
+                            <label>JPEG Quality (0=best, 63=worst) <span id="hw-quality-val">12</span></label>
+                            <input type="range" id="hw-quality" class="set-range" min="4" max="63" step="1">
+                        </div>
+                        <div class="setting-row">
+                            <label>Special Effect</label>
+                            <select id="hw-special-effect" class="set-input">
+                                <option value="0">None</option>
+                                <option value="1">Negative</option>
+                                <option value="2">Grayscale</option>
+                                <option value="3">Red tint</option>
+                                <option value="4">Green tint</option>
+                                <option value="5">Blue tint</option>
+                                <option value="6">Retro</option>
+                            </select>
+                        </div>
                     </div>
-                    <button class="tool-btn tool-btn--accent" id="btn-save-settings" style="margin-top:1rem">
-                        SAVE SETTINGS
-                    </button>
+                    <div class="settings-card">
+                        <div class="card-title">EXPOSURE & GAIN</div>
+                        <div class="setting-row toggle-row">
+                            <label>Auto Exposure (AEC)</label>
+                            <div class="toggle" id="hw-aec">
+                                <div class="toggle-knob"></div>
+                            </div>
+                        </div>
+                        <div class="setting-row toggle-row">
+                            <label>Night Mode (AEC2)</label>
+                            <div class="toggle" id="hw-aec2">
+                                <div class="toggle-knob"></div>
+                            </div>
+                        </div>
+                        <div class="setting-row">
+                            <label>AE Level (-2..2) <span id="hw-ae-level-val">0</span></label>
+                            <input type="range" id="hw-ae-level" class="set-range" min="-2" max="2" step="1">
+                        </div>
+                        <div class="setting-row">
+                            <label>Manual Exposure (0-1200) <span id="hw-aec-value-val">300</span></label>
+                            <input type="range" id="hw-aec-value" class="set-range" min="0" max="1200">
+                        </div>
+                        <div class="setting-row toggle-row">
+                            <label>Auto Gain (AGC)</label>
+                            <div class="toggle" id="hw-agc">
+                                <div class="toggle-knob"></div>
+                            </div>
+                        </div>
+                        <div class="setting-row">
+                            <label>AGC Gain (0-30) <span id="hw-agc-gain-val">0</span></label>
+                            <input type="range" id="hw-agc-gain" class="set-range" min="0" max="30">
+                        </div>
+                        <div class="setting-row">
+                            <label>Gain Ceiling <span id="hw-gainceiling-val">0</span></label>
+                            <input type="range" id="hw-gainceiling" class="set-range" min="0" max="6">
+                        </div>
+                    </div>
+                    <div class="settings-card">
+                        <div class="card-title">COLOR & BALANCE</div>
+                        <div class="setting-row">
+                            <label>Brightness (-2..2) <span id="hw-brightness-val">0</span></label>
+                            <input type="range" id="hw-brightness" class="set-range" min="-2" max="2" step="1">
+                        </div>
+                        <div class="setting-row">
+                            <label>Contrast (-2..2) <span id="hw-contrast-val">0</span></label>
+                            <input type="range" id="hw-contrast" class="set-range" min="-2" max="2" step="1">
+                        </div>
+                        <div class="setting-row">
+                            <label>Saturation (-2..2) <span id="hw-saturation-val">0</span></label>
+                            <input type="range" id="hw-saturation" class="set-range" min="-2" max="2" step="1">
+                        </div>
+                        <div class="setting-row">
+                            <label>Sharpness (-2..2) <span id="hw-sharpness-val">0</span></label>
+                            <input type="range" id="hw-sharpness" class="set-range" min="-2" max="2" step="1">
+                        </div>
+                        <div class="setting-row">
+                            <label>White Balance Mode</label>
+                            <select id="hw-wb-mode" class="set-input">
+                                <option value="0">Auto</option>
+                                <option value="1">Sunny</option>
+                                <option value="2">Cloudy</option>
+                                <option value="3">Office</option>
+                                <option value="4">Home</option>
+                            </select>
+                        </div>
+                        <div class="setting-row toggle-row">
+                            <label>AWB</label>
+                            <div class="toggle on" id="hw-awb">
+                                <div class="toggle-knob"></div>
+                            </div>
+                        </div>
+                        <div class="setting-row toggle-row">
+                            <label>AWB Gain</label>
+                            <div class="toggle on" id="hw-awb-gain">
+                                <div class="toggle-knob"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="settings-card">
+                        <div class="card-title">IMAGE CORRECTIONS</div>
+                        <div class="setting-row">
+                            <label>Denoise (0-8) <span id="hw-denoise-val">0</span></label>
+                            <input type="range" id="hw-denoise" class="set-range" min="0" max="8">
+                        </div>
+                        <div class="setting-row toggle-row">
+                            <label>Vertical Flip</label>
+                            <div class="toggle" id="hw-vflip">
+                                <div class="toggle-knob"></div>
+                            </div>
+                        </div>
+                        <div class="setting-row toggle-row">
+                            <label>Horizontal Mirror</label>
+                            <div class="toggle" id="hw-hmirror">
+                                <div class="toggle-knob"></div>
+                            </div>
+                        </div>
+                        <div class="setting-row toggle-row">
+                            <label>Lens Correction (LENC)</label>
+                            <div class="toggle on" id="hw-lenc">
+                                <div class="toggle-knob"></div>
+                            </div>
+                        </div>
+                        <div class="setting-row toggle-row">
+                            <label>Gamma Correction</label>
+                            <div class="toggle on" id="hw-raw-gma">
+                                <div class="toggle-knob"></div>
+                            </div>
+                        </div>
+                        <div class="setting-row toggle-row">
+                            <label>Black Pixel Fix (BPC)</label>
+                            <div class="toggle" id="hw-bpc">
+                                <div class="toggle-knob"></div>
+                            </div>
+                        </div>
+                        <div class="setting-row toggle-row">
+                            <label>White Pixel Fix (WPC)</label>
+                            <div class="toggle on" id="hw-wpc">
+                                <div class="toggle-knob"></div>
+                            </div>
+                        </div>
+                        <div class="setting-row toggle-row">
+                            <label>Downsize (DCW)</label>
+                            <div class="toggle on" id="hw-dcw">
+                                <div class="toggle-knob"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div style="margin-top:1rem;display:flex;gap:.5rem;flex-wrap:wrap">
+                    <button class="tool-btn tool-btn--accent" id="btn-push-global-hw">⚡ PUSH TO ALL CAMERAS</button>
+                    <button class="tool-btn" id="btn-reset-hw">↺ RESET DEFAULTS</button>
+                </div>
+            </div>
+
+            <!-- System tab -->
+            <div class="stab-panel" id="stab-system">
+                <div class="settings-grid">
+                    <div class="settings-card">
+                        <div class="card-title">SERVER</div>
+                        <div class="setting-row">
+                            <label>Server name</label>
+                            <input type="text" id="set-server-name" class="set-input">
+                        </div>
+                    </div>
+                    <div class="settings-card">
+                        <div class="card-title">MOTION DETECTION</div>
+                        <div class="setting-row">
+                            <label>Sensitivity <span id="set-motion-val">25</span></label>
+                            <input type="range" id="set-motion-sens" class="set-range" min="1" max="100">
+                        </div>
+                    </div>
+                    <div class="settings-card">
+                        <div class="card-title">RECORDING</div>
+                        <div class="setting-row">
+                            <label>FPS <span id="set-rec-fps-val">10</span></label>
+                            <input type="range" id="set-rec-fps" class="set-range" min="5" max="30">
+                        </div>
+                        <div class="setting-row">
+                            <label>Max clip length (seconds)</label>
+                            <input type="number" id="set-rec-max" class="set-input" min="10" max="3600">
+                        </div>
+                    </div>
+                    <div class="settings-card">
+                        <div class="card-title">SYSTEM INFO</div>
+                        <div id="sys-info" class="code-block">Loading...</div>
+                    </div>
+                </div>
+                <div style="margin-top:1rem">
+                    <button class="tool-btn tool-btn--accent" id="btn-save-settings">SAVE ALL SETTINGS</button>
+                </div>
+            </div>
+
+            <!-- Plugins tab -->
+            <div class="stab-panel" id="stab-plugins">
+                <div id="plugins-list" class="plugins-list">
+                    <div class="empty-state">
+                        <span class="empty-icon">⊕</span>
+                        <p>NO PLUGINS LOADED</p>
+                        <p class="empty-sub">Place .py files in the <code>server/plugins/</code> directory and restart
+                            the server.</p>
+                    </div>
+                </div>
+                <div class="plugin-help">
+                    <div class="card-title">HOW TO ADD A PLUGIN</div>
+                    <div class="code-block">
+                        # server/plugins/my_plugin.py
+                        from server import PhantomPlugin, register_plugin
+
+                        class MyPlugin(PhantomPlugin):
+                        name = "my_plugin"
+                        version = "1.0"
+                        description = "Does something useful"
+
+                        def on_alert(self, alert):
+                        # Called on every alert
+                        print(f"Alert: {alert['detail']}")
+
+                        def on_frame(self, cam_id, frame_bytes, detections):
+                        # Called on every processed frame
+                        pass
+
+                        register_plugin(MyPlugin())
+                    </div>
+                </div>
+            </div>
+
+            <!-- Recordings tab -->
+            <div class="stab-panel" id="stab-recordings">
+                <div class="alerts-toolbar">
+                    <h2 class="section-title">SAVED RECORDINGS</h2>
+                    <button class="tool-btn" id="btn-refresh-recordings">↻ REFRESH</button>
+                </div>
+                <div id="recordings-list" class="recordings-list">
+                    <div class="empty-state"><span class="empty-icon">⏹</span>
+                        <p>NO RECORDINGS YET</p>
+                    </div>
                 </div>
             </div>
         </section>
-
     </main>
 
-    <!-- ── Add Camera Modal ──────────────────────────────────────────────────── -->
+    <!-- ════════════════════════════════════════════════════════════════════════
+       MODALS
+  ════════════════════════════════════════════════════════════════════════════ -->
+
+    <!-- Add Camera -->
     <div id="modal-add-cam" class="modal hidden">
         <div class="modal-box">
             <div class="modal-title">◈ ADD CAMERA</div>
@@ -198,9 +497,7 @@
             <input id="new-cam-name" class="modal-input" placeholder="e.g. Front Door">
             <label class="modal-label">MJPEG Stream URL</label>
             <input id="new-cam-url" class="modal-input" placeholder="http://192.168.1.xxx/stream">
-            <div class="modal-hint">
-                The ESP32-CAM streams at: <code>http://&lt;camera-ip&gt;/stream</code>
-            </div>
+            <div class="modal-hint">ESP32-CAM streams at: <code>http://&lt;ip&gt;/stream</code></div>
             <div class="modal-actions">
                 <button class="tool-btn" id="btn-modal-cancel">CANCEL</button>
                 <button class="tool-btn tool-btn--accent" id="btn-modal-save">ADD CAMERA</button>
@@ -208,24 +505,93 @@
         </div>
     </div>
 
-    <!-- ── Discover Modal ────────────────────────────────────────────────────── -->
+    <!-- Discover -->
     <div id="modal-discover" class="modal hidden">
         <div class="modal-box">
-            <div class="modal-title">⊙ AUTO-DISCOVER CAMERAS</div>
+            <div class="modal-title">⊙ AUTO-DISCOVER</div>
             <label class="modal-label">Subnet to scan</label>
             <input id="discover-subnet" class="modal-input" value="192.168.1">
-            <div class="modal-hint">Scans x.x.x.1–254 for Phantom Eye cameras. Takes ~5 seconds.</div>
+            <div class="modal-hint">Scans .1–.254 for Phantom Eye cameras (~5 sec)</div>
             <div id="discover-results" class="discover-results hidden"></div>
             <div class="modal-actions">
                 <button class="tool-btn" id="btn-discover-cancel">CANCEL</button>
-                <button class="tool-btn tool-btn--accent" id="btn-discover-scan">SCAN NETWORK</button>
+                <button class="tool-btn tool-btn--accent" id="btn-discover-scan">SCAN</button>
             </div>
         </div>
     </div>
 
-    <!-- ── Toast notification ────────────────────────────────────────────────── -->
-    <div id="toast" class="toast hidden"></div>
+    <!-- Per-camera settings override -->
+    <div id="modal-cam-settings" class="modal hidden">
+        <div class="modal-box modal-box--wide">
+            <div class="modal-title" id="cam-settings-title">CAMERA SETTINGS</div>
+            <div class="modal-hint" style="margin-bottom:.75rem">Overrides global defaults for this camera only.</div>
+            <div class="cam-ov-grid">
+                <div>
+                    <label class="modal-label">Resolution</label>
+                    <select id="ov-framesize" class="modal-input">
+                        <option value="">— Global —</option>
+                        <option value="5">QVGA 320x240</option>
+                        <option value="6">CIF 400x296</option>
+                        <option value="7">HVGA 480x320</option>
+                        <option value="8">VGA 640x480</option>
+                        <option value="9">SVGA 800x600</option>
+                        <option value="10">XGA 1024x768</option>
+                        <option value="13">UXGA 1600x1200</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="modal-label">Quality (0=best)</label>
+                    <input type="number" id="ov-quality" class="modal-input" placeholder="— Global —" min="0" max="63">
+                </div>
+                <div>
+                    <label class="modal-label">Brightness (-2..2)</label>
+                    <input type="number" id="ov-brightness" class="modal-input" placeholder="— Global —" min="-2"
+                        max="2">
+                </div>
+                <div>
+                    <label class="modal-label">Contrast (-2..2)</label>
+                    <input type="number" id="ov-contrast" class="modal-input" placeholder="— Global —" min="-2" max="2">
+                </div>
+                <div>
+                    <label class="modal-label">Saturation (-2..2)</label>
+                    <input type="number" id="ov-saturation" class="modal-input" placeholder="— Global —" min="-2"
+                        max="2">
+                </div>
+                <div>
+                    <label class="modal-label">VFlip</label>
+                    <select id="ov-vflip" class="modal-input">
+                        <option value="">— Global —</option>
+                        <option value="0">Off</option>
+                        <option value="1">On</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="modal-label">HMirror</label>
+                    <select id="ov-hmirror" class="modal-input">
+                        <option value="">— Global —</option>
+                        <option value="0">Off</option>
+                        <option value="1">On</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="modal-label">Special Effect</label>
+                    <select id="ov-special-effect" class="modal-input">
+                        <option value="">— Global —</option>
+                        <option value="0">None</option>
+                        <option value="1">Negative</option>
+                        <option value="2">Grayscale</option>
+                        <option value="6">Retro</option>
+                    </select>
+                </div>
+            </div>
+            <div class="modal-actions">
+                <button class="tool-btn" id="btn-cam-settings-cancel">CANCEL</button>
+                <button class="tool-btn tool-btn--accent" id="btn-cam-settings-save">APPLY</button>
+            </div>
+        </div>
+    </div>
 
+    <div id="toast" class="toast hidden"></div>
     <script src="/static/js/dashboard.js"></script>
 </body>
 
