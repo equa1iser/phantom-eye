@@ -52,8 +52,10 @@ class FlasherApp(tk.Tk):
         # Header
         hdr = tk.Frame(self, bg=BG, pady=20)
         hdr.pack(fill="x")
-        tk.Label(hdr, text="◈  PHANTOM EYE", bg=BG, fg=ACCENT,
-                 font=("Courier", 22, "bold"), letter_spacing=4).pack()
+        tk.Label(hdr, text="◈ PHANTOM EYE", bg=BG, fg=ACCENT, 
+                 font=("Courier", 22, "bold")).pack()
+        # tk.Label(hdr, text="◈  PHANTOM EYE", bg=BG, fg=ACCENT,
+        #          font=("Courier", 22, "bold"), letter_spacing=4).pack()
         tk.Label(hdr, text="ESP32-CAM FLASHER", bg=BG, fg=MUTED,
                  font=("Courier", 10)).pack()
 
@@ -91,12 +93,12 @@ class FlasherApp(tk.Tk):
                     "dash_ip", "192.168.1.100")
         self._field(left, "Dashboard Port", "", "dash_port", "5000")
 
-        self._section(left, "③ FLASH")
-        flash_note = ("Make sure the ESP32-CAM is in FLASH MODE:\n"
-                      "Hold IO0 button → Press RESET → Release IO0")
-        tk.Label(left, text=flash_note, bg=BG, fg=YELLOW,
-                 font=("Courier", 8), justify="left").pack(anchor="w",
-                                                            pady=(0, 10))
+        # self._section(left, "③ FLASH")
+        # flash_note = ("Make sure the ESP32-CAM is in FLASH MODE:\n"
+        #               "Hold IO0 button → Press RESET → Release IO0")
+        # tk.Label(left, text=flash_note, bg=BG, fg=YELLOW,
+        #          font=("Courier", 8), justify="left").pack(anchor="w",
+        #                                                     pady=(0, 10))
 
         self.flash_btn = self._btn(left, "⚡  FLASH CAMERA", self._flash,
                                     color=ACCENT, fg=BG, big=True)
