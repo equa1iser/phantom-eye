@@ -1,0 +1,19 @@
+# Environment — never commit secrets
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+venv/
+.venv/
+
+# Server runtime data (cameras, alerts, snapshots, recordings)
+server/data/
+
+# Docker runtime state
+docker/signoz-db/
+docker/alertmanager-data/
+
+# OS
+.DS_Store
+Thumbs.db

@@ -66,6 +66,7 @@ String camName = "Front-Door";
 String dashIP = "192.168.0.83";
 uint16_t dashPort = 5000;
 bool ledOn = false;
+unsigned long lastWifiCheck = 0;
 
 // ── EEPROM helpers ────────────────────────────────────────────────────────────
 void writeStr(int addr, const String &s, int maxLen)
@@ -169,9 +170,11 @@ void handleStream()
       continue;
     }
     client.printf("--frame\r\nContent-Type: image/jpeg\r\nContent-Length: %d\r\n\r\n", fb->len);
-    client.write(fb->buf, fb->len);
+    size_t written = client.write(fb->buf, fb->len);
     client.print("\r\n");
     esp_camera_fb_return(fb);
+    if (!written) break;  // client disconnected — stop streaming immediately
+    delay(1);             // yield to WiFi/TCP stack so connection stays healthy
   }
 }
 
@@ -461,7 +464,17 @@ void setup()
 
 void loop()
 {
+  if (!configMode && WiFi.status() != WL_CONNECTED)
+  {
+    unsigned long now = millis();
+    if (now - lastWifiCheck > 5000)
+    {
+      lastWifiCheck = now;
+      Serial.println("[!] WiFi lost, reconnecting...");
+      WiFi.reconnect();
+    }
+    delay(100);
+    return;
+  }
   server.handleClient();
-  // if (!configMode)
-  //   MDNS.update();
 }

@@ -1,0 +1,137 @@
+version: "3.9"
+
+# ── Shared network ────────────────────────────────────────────────────────────
+networks:
+  signoz-net:
+    driver: bridge
+
+# ── Named volumes (persist across container restarts) ─────────────────────────
+volumes:
+  zookeeper-data:
+  clickhouse-data:
+
+# ── Services ──────────────────────────────────────────────────────────────────
+services:
+
+  # ── ZooKeeper (ClickHouse coordination) ─────────────────────────────────────
+  zookeeper:
+    image: bitnami/zookeeper:3.7.1
+    hostname: zookeeper
+    environment:
+      ALLOW_ANONYMOUS_LOGIN: "yes"
+      ZOO_AUTOPURGE_INTERVAL: "1"
+    volumes:
+      - zookeeper-data:/bitnami/zookeeper
+    networks:
+      - signoz-net
+    restart: unless-stopped
+
+  # ── ClickHouse (trace/metric/log storage) ────────────────────────────────────
+  clickhouse:
+    image: clickhouse/clickhouse-server:23.11.1
+    hostname: clickhouse
+    depends_on:
+      - zookeeper
+    environment:
+      CLICKHOUSE_USER: admin
+      CLICKHOUSE_PASSWORD: 27ff0399-0d3a-4bd8-919d-17c2181e6fb9
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
+    networks:
+      - signoz-net
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "localhost:8123/ping"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # ── SigNoz OTEL Collector ────────────────────────────────────────────────────
+  # Uses the SigNoz custom build — upstream otelcol-contrib does NOT include
+  # the clickhousetraces/metricswrite/logsexporter exporters.
+  otel-collector:
+    image: signoz/signoz-otel-collector:0.88.11
+    command: ["--config=/etc/otel-collector-config.yaml"]
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+    volumes:
+      - ./docker/otel-collector-config.yaml:/etc/otel-collector-config.yaml
+    ports:
+      - "4317:4317"   # gRPC OTLP — used by phantom-eye
+      - "4318:4318"   # HTTP OTLP — optional
+    networks:
+      - signoz-net
+    restart: unless-stopped
+
+  # ── SigNoz Query Service ─────────────────────────────────────────────────────
+  query-service:
+    image: signoz/query-service:0.45.2
+    hostname: query-service
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+      otel-collector:
+        condition: service_started
+    environment:
+      ClickHouseUrl: tcp://admin:27ff0399-0d3a-4bd8-919d-17c2181e6fb9@clickhouse:9000
+      STORAGE: clickhouse
+      GODEBUG: netdns=go
+      TELEMETRY_ENABLED: "false"
+      SIGNOZ_LOCAL_DB_PATH: /var/lib/signoz/signoz.db
+    volumes:
+      - ./docker/signoz-db:/var/lib/signoz
+    networks:
+      - signoz-net
+    restart: unless-stopped
+
+  # ── SigNoz Alert Manager ─────────────────────────────────────────────────────
+  alertmanager:
+    image: signoz/alertmanager:0.23.4
+    depends_on:
+      - query-service
+    command:
+      - --queryService.url=http://query-service:8080
+      - --storage.path=/data
+    volumes:
+      - ./docker/alertmanager-data:/data
+    networks:
+      - signoz-net
+    restart: unless-stopped
+
+  # ── SigNoz Frontend (UI) ─────────────────────────────────────────────────────
+  frontend:
+    image: signoz/frontend:0.45.2
+    depends_on:
+      - query-service
+    environment:
+      NGINX_BACKEND_HOST: query-service
+      NGINX_BACKEND_PORT: "8080"
+    ports:
+      - "3301:3301"   # SigNoz UI → http://localhost:3301
+    networks:
+      - signoz-net
+    restart: unless-stopped
+
+  # ── Phantom Eye ───────────────────────────────────────────────────────────────
+  phantom-eye:
+    build:
+      context: .
+      args:
+        YOLO: "false"   # set to "true" to include ultralytics (~500 MB extra)
+    depends_on:
+      - otel-collector
+    ports:
+      - "5000:5000"   # Dashboard → http://localhost:5000
+    env_file:
+      - .env
+    environment:
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_SERVICE_NAME: phantom-eye
+    volumes:
+      - ./server/data:/app/data         # cameras.json, alerts, snapshots, recordings
+      - ./server/plugins:/app/plugins   # plugin hot-swap without rebuild
+    networks:
+      - signoz-net
+    restart: unless-stopped

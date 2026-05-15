@@ -5,4 +5,11 @@ opencv-python-headless>=4.8
 numpy>=1.24
 # Optional AI detection (install separately if you want YOLO):
 # ultralytics>=8.0
+
+# OpenTelemetry (traces, metrics, logs → SigNoz)
+opentelemetry-sdk>=1.24
+opentelemetry-exporter-otlp-proto-grpc>=1.24
+opentelemetry-instrumentation-flask>=0.45b0
+opentelemetry-instrumentation-requests>=0.45b0
+opentelemetry-instrumentation-logging>=0.45b0
  

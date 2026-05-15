@@ -371,6 +371,13 @@ function renderFocusSidebar() {
       )
       .join("");
   }
+
+  // Keep LED button in sync with server state on every poll
+  const ledBtn = document.getElementById("btn-led");
+  if (ledBtn && cam) {
+    ledBtn.classList.toggle("led-on", !!cam.led);
+    ledBtn.textContent = cam.led ? "💡 LED ON" : "💡 LED OFF";
+  }
 }
 
 // Snapshot
@@ -401,12 +408,20 @@ document.getElementById("btn-led").addEventListener("click", async () => {
   if (!S.focusCam) return;
   const cam = S.cameras.find((c) => c.id === S.focusCam);
   const on = !cam?.led;
-  await api(`/api/cameras/${S.focusCam}/led`, {
+  const result = await api(`/api/cameras/${S.focusCam}/led`, {
     method: "POST",
     body: JSON.stringify({ on }),
-  });
+  }).catch(() => null);
+  if (!result?.ok) {
+    toast("LED control failed — camera offline?", true);
+    return;
+  }
+  // Update local state immediately so next click reads the correct value
+  if (cam) cam.led = on;
+  const ledBtn = document.getElementById("btn-led");
+  ledBtn.classList.toggle("led-on", on);
+  ledBtn.textContent = on ? "💡 LED ON" : "💡 LED OFF";
   toast(`LED ${on ? "ON" : "OFF"}`);
-  poll();
 });
 
 // ─── History / Stats ──────────────────────────────────────────────────────────

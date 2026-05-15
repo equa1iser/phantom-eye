@@ -14,6 +14,7 @@ Deps:   pip install flask flask-cors requests ultralytics opencv-python-headless
 """
 
 import os, json, time, threading, logging, re
+from contextlib import nullcontext
 from pathlib import Path
 from datetime import datetime, date
 from typing import Optional
@@ -31,6 +32,11 @@ try:
 except ImportError:
     YOLO_AVAILABLE = False
     YOLO = None
+
+try:
+    from otel import setup_otel
+except ImportError:
+    def setup_otel(name): return None, None
 
 # ─── Logging ──────────────────────────────────────────────────────────────────
 logging.basicConfig(level=logging.INFO,
@@ -122,6 +128,21 @@ app = Flask(__name__,
             template_folder="dashboard/templates",
             static_folder="dashboard/static")
 CORS(app)
+
+tracer, meter = setup_otel("phantom-eye")
+if tracer:
+    from opentelemetry.instrumentation.flask import FlaskInstrumentor
+    FlaskInstrumentor().instrument_app(app)
+
+# ── Metric instruments ────────────────────────────────────────────────────────
+frames_processed     = meter.create_counter("phantom.frames.processed",    unit="frames")      if meter else None
+detections_total     = meter.create_counter("phantom.detections.total",     unit="detections")  if meter else None
+motion_events_ctr    = meter.create_counter("phantom.motion.events",        unit="events")      if meter else None
+alerts_fired_ctr     = meter.create_counter("phantom.alerts.fired",         unit="alerts")      if meter else None
+alerts_suppressed    = meter.create_counter("phantom.alerts.suppressed",    unit="alerts")      if meter else None
+stream_errors_ctr    = meter.create_counter("phantom.stream.errors",        unit="errors")      if meter else None
+frames_processing_ms = meter.create_histogram("phantom.frames.processing_ms", unit="ms")        if meter else None
+ai_inference_ms      = meter.create_histogram("phantom.ai.inference_ms",       unit="ms")        if meter else None
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -261,21 +282,30 @@ def get_yolo():
 def run_detection(frame_bytes: bytes) -> list:
     model = get_yolo()
     if not model: return []
-    nparr = np.frombuffer(frame_bytes, np.uint8)
-    img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-    if img is None: return []
-    conf = settings.get("ai_confidence", 0.5)
-    results = model(img, conf=conf, verbose=False)[0]
-    out = []
-    fc = settings.get("ai_classes", [])
-    for box in results.boxes:
-        cid = int(box.cls[0])
-        cn  = model.names[cid]
-        if fc and cn not in fc: continue
-        x1,y1,x2,y2 = box.xyxy[0].tolist()
-        out.append({"class": cn, "confidence": round(float(box.conf[0]),3),
-                    "bbox": [int(x1),int(y1),int(x2),int(y2)]})
-    return out
+    _t0 = time.monotonic()
+    with (tracer.start_as_current_span(
+            "ai.inference",
+            attributes={"yolo.model": settings.get("ai_model", "yolov8n.pt")},
+          ) if tracer else nullcontext()) as span:
+        nparr = np.frombuffer(frame_bytes, np.uint8)
+        img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        if img is None: return []
+        conf = settings.get("ai_confidence", 0.5)
+        results = model(img, conf=conf, verbose=False)[0]
+        out = []
+        fc = settings.get("ai_classes", [])
+        for box in results.boxes:
+            cid = int(box.cls[0])
+            cn  = model.names[cid]
+            if fc and cn not in fc: continue
+            x1,y1,x2,y2 = box.xyxy[0].tolist()
+            out.append({"class": cn, "confidence": round(float(box.conf[0]),3),
+                        "bbox": [int(x1),int(y1),int(x2),int(y2)]})
+        if span and span.is_recording():
+            span.set_attribute("detections.count", len(out))
+        if ai_inference_ms:
+            ai_inference_ms.record((time.monotonic() - _t0) * 1000)
+        return out
 
 def draw_detections(frame_bytes: bytes, detections: list) -> bytes:
     nparr = np.frombuffer(frame_bytes, np.uint8)
@@ -315,29 +345,35 @@ def detect_motion(cam: dict, frame_bytes: bytes) -> bool:
 def start_recording(cam_id: str):
     cam = cameras.get(cam_id)
     if not cam or cam["recording"]: return
-    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    path = str(RECORD_DIR / f"{cam_id}_{ts}.mp4")
-    fps = settings.get("recording_fps", 10)
-    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-    with cam["writer_lock"]:
-        cam["writer"] = cv2.VideoWriter(path, fourcc, fps, (640, 480))
-        cam["recording"] = True
-        cam["record_start"] = time.time()
-        cam["record_path"] = path
-        cam["record_frames"] = 0
-    log.info(f"[{cam_id}] Recording started: {path}")
+    with (tracer.start_as_current_span(
+            "recording.start", attributes={"cam.id": cam_id}
+          ) if tracer else nullcontext()):
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        path = str(RECORD_DIR / f"{cam_id}_{ts}.mp4")
+        fps = settings.get("recording_fps", 10)
+        fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+        with cam["writer_lock"]:
+            cam["writer"] = cv2.VideoWriter(path, fourcc, fps, (640, 480))
+            cam["recording"] = True
+            cam["record_start"] = time.time()
+            cam["record_path"] = path
+            cam["record_frames"] = 0
+        log.info(f"[{cam_id}] Recording started: {path}")
 
 def stop_recording(cam_id: str) -> Optional[str]:
     cam = cameras.get(cam_id)
     if not cam or not cam["recording"]: return None
-    with cam["writer_lock"]:
-        if cam["writer"]:
-            cam["writer"].release()
-            cam["writer"] = None
-        cam["recording"] = False
-        path = cam.get("record_path", "")
-    log.info(f"[{cam_id}] Recording stopped")
-    return path
+    with (tracer.start_as_current_span(
+            "recording.stop", attributes={"cam.id": cam_id}
+          ) if tracer else nullcontext()):
+        with cam["writer_lock"]:
+            if cam["writer"]:
+                cam["writer"].release()
+                cam["writer"] = None
+            cam["recording"] = False
+            path = cam.get("record_path", "")
+        log.info(f"[{cam_id}] Recording stopped")
+        return path
 
 def write_frame_to_recording(cam: dict, frame_bytes: bytes):
     if not cam["recording"]: return
@@ -364,30 +400,47 @@ def fire_alert(cam_id: str, alert_type: str, detail: str,
     cam = cameras[cam_id]
     now = time.time()
     cooldown = settings.get("alert_cooldown", 30)
-    if now - cam["last_alert"].get(alert_type, 0) < cooldown: return
-    cam["last_alert"][alert_type] = now
 
-    alert = {
-        "id": f"alert_{int(now*1000)}",
-        "cam_id": cam_id,
-        "cam_name": cam["name"],
-        "type": alert_type,
-        "detail": detail,
-        "timestamp": datetime.now().isoformat(),
-        "snapshot": None,
-    }
-    if frame_bytes and settings.get("snapshot_on_alert", True):
-        snap = f"{cam_id}_{alert['id']}.jpg"
-        (ALERT_DIR / snap).write_bytes(frame_bytes)
-        alert["snapshot"] = snap
+    with (tracer.start_as_current_span(
+            "alert.pipeline",
+            attributes={"cam.id": cam_id, "alert.type": alert_type},
+          ) if tracer else nullcontext()) as span:
+        if now - cam["last_alert"].get(alert_type, 0) < cooldown:
+            if alerts_suppressed:
+                alerts_suppressed.add(1, {"cam.id": cam_id, "alert.type": alert_type})
+            if span and span.is_recording():
+                span.set_attribute("alert.suppressed", True)
+            return
 
-    with state_lock:
-        alert_history.append(alert)
-    save_alerts()
-    log.warning(f"ALERT [{cam_id}] {alert_type}: {detail}")
-    for p in plugin_registry:
-        try: p.on_alert(alert)
-        except Exception as e: log.error(f"Plugin {p.name} error: {e}")
+        cam["last_alert"][alert_type] = now
+        has_snapshot = bool(frame_bytes and settings.get("snapshot_on_alert", True))
+        if span and span.is_recording():
+            span.set_attribute("alert.suppressed", False)
+            span.set_attribute("alert.has_snapshot", has_snapshot)
+
+        alert = {
+            "id": f"alert_{int(now*1000)}",
+            "cam_id": cam_id,
+            "cam_name": cam["name"],
+            "type": alert_type,
+            "detail": detail,
+            "timestamp": datetime.now().isoformat(),
+            "snapshot": None,
+        }
+        if has_snapshot:
+            snap = f"{cam_id}_{alert['id']}.jpg"
+            (ALERT_DIR / snap).write_bytes(frame_bytes)
+            alert["snapshot"] = snap
+
+        with state_lock:
+            alert_history.append(alert)
+        save_alerts()
+        log.warning(f"ALERT [{cam_id}] {alert_type}: {detail}")
+        if alerts_fired_ctr:
+            alerts_fired_ctr.add(1, {"cam.id": cam_id, "alert.type": alert_type})
+        for p in plugin_registry:
+            try: p.on_alert(alert)
+            except Exception as e: log.error(f"Plugin {p.name} error: {e}")
 
 def record_detection(cam_id: str, cam_name: str, cls: str, conf: float):
     entry = {
@@ -420,13 +473,30 @@ def camera_thread(cam_id: str):
         frame_count = 0
 
         try:
-            r = requests.get(url, stream=True, timeout=10)
-            if r.status_code != 200:
-                raise ConnectionError(f"HTTP {r.status_code}")
+            with (tracer.start_as_current_span(
+                    "camera.stream_connect",
+                    attributes={"cam.id": cam_id, "stream.url": url},
+                  ) if tracer else nullcontext()) as _conn_span:
+                r = requests.get(url, stream=True, timeout=10)
+                if _conn_span and _conn_span.is_recording():
+                    _conn_span.set_attribute("http.status_code", r.status_code)
+                if r.status_code != 200:
+                    raise ConnectionError(f"HTTP {r.status_code}")
 
             with state_lock:
                 cam["online"] = True
                 cam["last_seen"] = datetime.now().isoformat()
+
+            # Sync LED state from camera on (re)connect so server state matches reality
+            base = cam.get("base_url", "")
+            if base:
+                try:
+                    sr = requests.get(f"{base}/status", timeout=3)
+                    if sr.status_code == 200:
+                        with state_lock:
+                            cam["led"] = sr.json().get("led", cam.get("led", False))
+                except Exception:
+                    pass
 
             # Push hardware settings on connect
             push_cam_settings(cam_id)
@@ -441,6 +511,7 @@ def camera_thread(cam_id: str):
                     frame_bytes = buf[start:end+2]
                     buf = buf[end+2:]
                     frame_count += 1
+                    _frame_t0 = time.monotonic()
 
                     # ── AI detection ──────────────────────────────────────────
                     ai_on = settings.get("ai_enabled", False)
@@ -458,6 +529,8 @@ def camera_thread(cam_id: str):
                         for det in detections:
                             record_detection(cam_id, cam["name"],
                                              det["class"], det["confidence"])
+                            if detections_total:
+                                detections_total.add(1, {"cam.id": cam_id, "detection.class": det["class"]})
                             if det["class"] in ac:
                                 fire_alert(cam_id,
                                            f"detection_{det['class']}",
@@ -475,6 +548,8 @@ def camera_thread(cam_id: str):
                         motion = detect_motion(cam, frame_bytes)
                         with state_lock: cam["motion"] = motion
                         if motion:
+                            if motion_events_ctr:
+                                motion_events_ctr.add(1, {"cam.id": cam_id})
                             fire_alert(cam_id, "motion", "Motion detected", frame_bytes)
                     else:
                         with state_lock: cam["motion"] = False
@@ -493,8 +568,19 @@ def camera_thread(cam_id: str):
                         try: p.on_frame(cam_id, frame_bytes, detections)
                         except: pass
 
+                    # ── Per-frame metrics ─────────────────────────────────────
+                    if frames_processed:
+                        frames_processed.add(1, {"cam.id": cam_id})
+                    if frames_processing_ms:
+                        frames_processing_ms.record(
+                            (time.monotonic() - _frame_t0) * 1000,
+                            {"cam.id": cam_id},
+                        )
+
         except Exception as e:
             log.warning(f"[{cam_id}] Stream error: {e}")
+            if stream_errors_ctr:
+                stream_errors_ctr.add(1, {"cam.id": cam_id})
             with state_lock:
                 if cam_id in cameras:
                     cameras[cam_id]["online"] = False
@@ -872,6 +958,19 @@ def startup():
 
     autoload_plugins()
     log.info(f"Phantom Eye v2 started. {len(cameras)} camera(s), {len(plugin_registry)} plugin(s).")
+
+    if meter:
+        from opentelemetry.metrics import Observation
+        meter.create_observable_gauge(
+            "phantom.cameras.online",
+            callbacks=[lambda o: [Observation(sum(1 for c in cameras.values() if c["online"]))]],
+            description="Cameras currently online",
+        )
+        meter.create_observable_gauge(
+            "phantom.cameras.total",
+            callbacks=[lambda o: [Observation(len(cameras))]],
+            description="Total registered cameras",
+        )
 
 if __name__ == "__main__":
     startup()
