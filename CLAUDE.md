@@ -132,14 +132,15 @@ OTEL is import-safe: if packages are absent (bare-metal dev), `setup_otel()` ret
 - Stream stability: `handleStream()` checks `client.write()` return value and breaks on 0; calls `delay(1)` each frame to yield to WiFi stack.
 - LED state sync: server queries `GET /status` on every (re)connect to sync `cam["led"]` with actual ESP32 state.
 
-### LED Button Behaviour (JS)
+### LED Button Behaviour
 
-After a successful LED API call, the click handler:
-1. Updates `cam.led` in `S.cameras` immediately (optimistic update)
-2. Updates button text/class immediately
-3. Shows error toast if API returns `ok: false`
+Server state is authoritative for LED:
+- `push_led()` updates `cam["led"]` in memory **first**, then attempts the ESP32 HTTP call. The call may silently fail if the camera is offline — server state still updates.
+- `api_led` always returns `{"ok": true}` — the UI button always toggles regardless of camera reachability.
+- LED state is persisted to `cameras.json` via `save_cameras()` after every toggle, so it survives server restarts.
+- On camera (re)connect, `camera_thread` pushes the server-side LED state TO the camera (instead of pulling from it). Server state is the source of truth.
 
-`renderFocusSidebar()` also syncs the button on every poll tick so it stays accurate after reconnects/reboots.
+`renderFocusSidebar()` syncs the button on every poll tick from `S.cameras`, which reflects the server-side `cam.led`.
 
 ### Plugin System
 
@@ -182,3 +183,6 @@ All runtime data lives under `server/data/` (volume-mounted in Docker):
 - **Schema migrator must run first** — `signoz-schema-migrator` (uses the otel-collector image with `migrate bootstrap/sync up/async up`) creates all ClickHouse tables. Other services `depends_on: service_completed_successfully`.
 - **ClickHouse config goes in `config.d/` and `users.d/`** — never mount to `/etc/clickhouse-server/config.xml` directly in 25.x; it replaces the full default config and breaks startup. Use `config.d/overrides.xml` and `users.d/custom.xml` instead.
 - **FlaskInstrumentor two-phase pattern** — `FlaskInstrumentor().instrument()` in `otel.py` is the complete registration. Do NOT also call `instrument_app(app)` in `server.py` — it causes double-instrumentation warnings.
+- **AI/Motion toggles sync from poll()** — `poll()` calls `setToggle("toggle-ai", status.ai_enabled)` and `setToggle("toggle-motion", status.motion_enabled)` every 2.5s. Do NOT rely on initial HTML state for these toggles; the server state is authoritative.
+- **bindToggle uses parent label** — the click listener is attached to `toggle.closest("label") || toggle` so the full toggle-group label area is clickable, not just the knob.
+- **Date inputs in focus sidebar** — stacked vertically (`flex-direction: column`) to prevent the native date picker popup from overflowing the right edge of the screen.

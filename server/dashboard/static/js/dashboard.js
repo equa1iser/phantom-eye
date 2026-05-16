@@ -92,11 +92,13 @@ document.querySelectorAll(".stab").forEach((btn) => {
 
 // ─── Toggle helper ────────────────────────────────────────────────────────────
 function bindToggle(id, cb) {
-  const el = document.getElementById(id);
-  if (!el) return;
-  el.addEventListener("click", () => {
-    const on = !el.classList.contains("on");
-    el.classList.toggle("on", on);
+  const toggle = document.getElementById(id);
+  if (!toggle) return;
+  // Listen on the wrapping <label> if present so the whole group is clickable
+  const clickTarget = toggle.closest("label") || toggle;
+  clickTarget.addEventListener("click", () => {
+    const on = !toggle.classList.contains("on");
+    toggle.classList.toggle("on", on);
     cb(on);
   });
 }
@@ -952,6 +954,10 @@ async function poll() {
       api("/api/status"),
     ]);
     S.cameras = cameras;
+
+    // Keep AI/Motion toggles in sync with server state on every poll
+    setToggle("toggle-ai", status.ai_enabled);
+    setToggle("toggle-motion", status.motion_enabled);
 
     document.getElementById("stat-online").textContent = status.cameras_online;
     document.getElementById("stat-total").textContent = status.cameras_total;

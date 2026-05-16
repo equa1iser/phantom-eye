@@ -252,16 +252,17 @@ def push_cam_settings(cam_id: str, extra: dict = None):
 def push_led(cam_id: str, on: bool):
     cam = cameras.get(cam_id)
     if not cam: return False
+    # Update server state first so UI is always consistent
+    with state_lock:
+        cam["led"] = on
     base = cam.get("base_url", "")
+    if not base: return True
     try:
         r = requests.post(f"{base}/led", json={"on": on}, timeout=3)
-        if r.status_code == 200:
-            with state_lock:
-                cam["led"] = on
         return r.status_code == 200
     except Exception as e:
         log.warning(f"[{cam_id}] LED push failed: {e}")
-        return False
+        return True
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -484,19 +485,9 @@ def camera_thread(cam_id: str):
                 cam["online"] = True
                 cam["last_seen"] = datetime.now().isoformat()
 
-            # Sync LED state from camera on (re)connect so server state matches reality
-            base = cam.get("base_url", "")
-            if base:
-                try:
-                    sr = requests.get(f"{base}/status", timeout=3)
-                    if sr.status_code == 200:
-                        with state_lock:
-                            cam["led"] = sr.json().get("led", cam.get("led", False))
-                except Exception:
-                    pass
-
-            # Push hardware settings on connect
+            # Push hardware settings and LED state to camera on (re)connect
             push_cam_settings(cam_id)
+            push_led(cam_id, cam.get("led", False))
 
             buf = b""
             for chunk in r.iter_content(chunk_size=4096):
@@ -717,8 +708,9 @@ def api_update_camera(cam_id):
 def api_led(cam_id):
     if cam_id not in cameras: abort(404)
     on = request.get_json().get("on", False)
-    ok = push_led(cam_id, on)
-    return jsonify({"ok": ok, "led": on})
+    push_led(cam_id, on)
+    save_cameras()
+    return jsonify({"ok": True, "led": on})
 
 @app.route("/api/cameras/<cam_id>/settings", methods=["POST"])
 def api_cam_settings(cam_id):
@@ -946,6 +938,7 @@ def startup():
     for cam_id, cd in saved.items():
         cameras[cam_id] = cam_defaults(cam_id, cd.get("name",cam_id), cd.get("stream_url",""))
         cameras[cam_id]["base_url"] = _base_url(cd.get("stream_url",""))
+        cameras[cam_id]["led"] = cd.get("led", False)
         cameras[cam_id]["ai_enabled_override"] = cd.get("ai_enabled_override")
         cameras[cam_id]["cam_settings_override"] = cd.get("cam_settings_override", {})
         threading.Thread(target=camera_thread, args=(cam_id,), daemon=True).start()

@@ -660,9 +660,22 @@ body {
 /* History */
 .history-filter {
     display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-bottom: .5rem;
+}
+
+.date-row {
+    display: flex;
     align-items: center;
     gap: 5px;
-    margin-bottom: .5rem;
+}
+
+.date-label-text {
+    font-size: .55rem;
+    letter-spacing: .08em;
+    color: var(--mut);
+    min-width: 26px;
 }
 
 .date-input {
@@ -674,6 +687,7 @@ body {
     font-size: .62rem;
     padding: .28rem .4rem;
     border-radius: var(--r);
+    min-width: 0;
 }
 
 .date-input:focus {
