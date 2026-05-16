@@ -1,0 +1,33 @@
+<?xml version="1.0"?>
+<clickhouse>
+    <logger>
+        <level>information</level>
+        <console>1</console>
+    </logger>
+
+    <!-- Prometheus metrics scrape endpoint -->
+    <prometheus>
+        <endpoint>/metrics</endpoint>
+        <port>9363</port>
+        <metrics>true</metrics>
+        <events>true</events>
+        <asynchronous_metrics>true</asynchronous_metrics>
+        <status_info>true</status_info>
+    </prometheus>
+
+    <!-- Shard/replica macros used in ReplicatedMergeTree table paths -->
+    <macros>
+        <shard>01</shard>
+        <replica>01</replica>
+    </macros>
+
+    <!-- ZooKeeper-coordinated DDL queue path -->
+    <distributed_ddl>
+        <path>/clickhouse/task_queue/ddl</path>
+    </distributed_ddl>
+
+    <merge_tree_metadata_cache>
+        <lru_cache_size>268435456</lru_cache_size>
+        <continue_if_corrupted>true</continue_if_corrupted>
+    </merge_tree_metadata_cache>
+</clickhouse>

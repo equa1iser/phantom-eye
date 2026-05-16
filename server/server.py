@@ -130,9 +130,6 @@ app = Flask(__name__,
 CORS(app)
 
 tracer, meter = setup_otel("phantom-eye")
-if tracer:
-    from opentelemetry.instrumentation.flask import FlaskInstrumentor
-    FlaskInstrumentor().instrument_app(app)
 
 # ── Metric instruments ────────────────────────────────────────────────────────
 frames_processed     = meter.create_counter("phantom.frames.processed",    unit="frames")      if meter else None

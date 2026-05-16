@@ -1,0 +1,26 @@
+# Python
+server/venv/
+server/.venv/
+**/__pycache__/
+**/*.py[cod]
+
+# Runtime data (volume-mounted)
+server/data/
+
+# Git
+.git/
+.gitignore
+
+# Docs / tools
+README.md
+CLAUDE.md
+tools/
+esp32/
+
+# Docker runtime state
+docker/signoz-db/
+docker/alertmanager-data/
+
+# OS
+.DS_Store
+Thumbs.db

@@ -102,7 +102,7 @@ Allow 60-90 seconds on first run for ClickHouse (SigNoz's database) to initialis
 | Phantom Eye dashboard | `http://localhost:5000` | Add cameras here |
 | SigNoz UI | `http://localhost:3301` | Traces, metrics, logs |
 
-SigNoz first-run login: `admin@signoz.io` / `password`
+SigNoz first-run: navigate to `http://localhost:3301/signup` to create an admin account.
 
 ### F. Find your server IP (for flashing cameras)
 
@@ -493,10 +493,35 @@ ports:
 
 ### SigNoz not showing data
 
-- Allow 60-90 seconds after `docker-compose up -d` for ClickHouse to initialise
-- Check collector logs: `docker-compose logs otel-collector`
-- Verify phantom-eye is sending: `docker-compose logs phantom-eye | grep otel`
+- Allow 60-90 seconds after `docker compose up -d` for ClickHouse to initialise
+- Check collector logs: `docker compose logs otel-collector`
+- Verify phantom-eye is sending: `docker compose logs phantom-eye | grep otel`
 - If running bare-metal, set `OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317` in your shell
+
+### SigNoz schema migrator fails or hangs
+
+The `signoz-schema-migrator` runs once on first boot to create all ClickHouse tables. If it fails, check its logs:
+
+```bash
+docker compose logs signoz-schema-migrator
+```
+
+If it exited with an error, restart it after ClickHouse is healthy:
+
+```bash
+docker compose restart signoz-schema-migrator
+# Once it exits successfully, start the remaining services:
+docker compose up -d
+```
+
+### Port 5000 in use after switching from bare-metal to Docker
+
+If you previously ran the server via systemd, stop and disable that service first:
+
+```bash
+systemctl --user stop phantom-eye.service
+systemctl --user disable phantom-eye.service
+```
 
 ### Multiple cameras lag
 

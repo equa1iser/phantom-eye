@@ -1,5 +1,3 @@
-version: "3.9"
-
 # ── Shared network ────────────────────────────────────────────────────────────
 networks:
   signoz-net:
@@ -9,34 +7,42 @@ networks:
 volumes:
   zookeeper-data:
   clickhouse-data:
+  signoz-db:
 
 # ── Services ──────────────────────────────────────────────────────────────────
 services:
 
   # ── ZooKeeper (ClickHouse coordination) ─────────────────────────────────────
-  zookeeper:
-    image: bitnami/zookeeper:3.7.1
-    hostname: zookeeper
+  zookeeper-1:
+    image: signoz/zookeeper:3.7.1
+    hostname: zookeeper-1
     environment:
+      ZOO_SERVER_ID: "1"
       ALLOW_ANONYMOUS_LOGIN: "yes"
       ZOO_AUTOPURGE_INTERVAL: "1"
     volumes:
       - zookeeper-data:/bitnami/zookeeper
     networks:
       - signoz-net
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/bitnami/zookeeper/bin/zkServer.sh status 2>/dev/null | grep -q 'Mode:'"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
     restart: unless-stopped
 
   # ── ClickHouse (trace/metric/log storage) ────────────────────────────────────
   clickhouse:
-    image: clickhouse/clickhouse-server:23.11.1
+    image: clickhouse/clickhouse-server:25.5.6
     hostname: clickhouse
     depends_on:
-      - zookeeper
-    environment:
-      CLICKHOUSE_USER: admin
-      CLICKHOUSE_PASSWORD: 27ff0399-0d3a-4bd8-919d-17c2181e6fb9
-      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
+      zookeeper-1:
+        condition: service_healthy
     volumes:
+      - ./docker/clickhouse/config.xml:/etc/clickhouse-server/config.d/overrides.xml
+      - ./docker/clickhouse/users.xml:/etc/clickhouse-server/users.d/custom.xml
+      - ./docker/clickhouse/custom-function.xml:/etc/clickhouse-server/custom-function.xml
+      - ./docker/clickhouse/cluster.xml:/etc/clickhouse-server/config.d/cluster.xml
       - clickhouse-data:/var/lib/clickhouse
     networks:
       - signoz-net
@@ -47,15 +53,44 @@ services:
       retries: 5
     restart: unless-stopped
 
+  # ── SigNoz Schema Migrator (runs once, sets up all ClickHouse tables) ────────
+  signoz-schema-migrator:
+    image: signoz/signoz-otel-collector:v0.144.4
+    entrypoint: ["/bin/sh"]
+    command:
+      - "-c"
+      - >
+        /signoz-otel-collector migrate bootstrap &&
+        /signoz-otel-collector migrate sync up &&
+        /signoz-otel-collector migrate async up
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+    environment:
+      SIGNOZ_OTEL_COLLECTOR_CLICKHOUSE_DSN: tcp://clickhouse:9000
+      SIGNOZ_OTEL_COLLECTOR_CLICKHOUSE_CLUSTER: cluster
+      SIGNOZ_OTEL_COLLECTOR_CLICKHOUSE_REPLICATION: "true"
+      SIGNOZ_OTEL_COLLECTOR_TIMEOUT: 10m
+      LOW_CARDINAL_EXCEPTION_GROUPING: "false"
+    networks:
+      - signoz-net
+    restart: on-failure
+
   # ── SigNoz OTEL Collector ────────────────────────────────────────────────────
-  # Uses the SigNoz custom build — upstream otelcol-contrib does NOT include
-  # the clickhousetraces/metricswrite/logsexporter exporters.
   otel-collector:
-    image: signoz/signoz-otel-collector:0.88.11
+    image: signoz/signoz-otel-collector:v0.144.4
     command: ["--config=/etc/otel-collector-config.yaml"]
     depends_on:
       clickhouse:
         condition: service_healthy
+      signoz-schema-migrator:
+        condition: service_completed_successfully
+    environment:
+      OTEL_RESOURCE_ATTRIBUTES: "host.name=phantom-server,os.type=linux"
+      LOW_CARDINAL_EXCEPTION_GROUPING: "false"
+      SIGNOZ_OTEL_COLLECTOR_CLICKHOUSE_DSN: tcp://clickhouse:9000
+      SIGNOZ_OTEL_COLLECTOR_CLICKHOUSE_CLUSTER: cluster
+      SIGNOZ_OTEL_COLLECTOR_CLICKHOUSE_REPLICATION: "true"
     volumes:
       - ./docker/otel-collector-config.yaml:/etc/otel-collector-config.yaml
     ports:
@@ -65,51 +100,23 @@ services:
       - signoz-net
     restart: unless-stopped
 
-  # ── SigNoz Query Service ─────────────────────────────────────────────────────
-  query-service:
-    image: signoz/query-service:0.45.2
-    hostname: query-service
+  # ── SigNoz (combined UI + query service + alertmanager) ──────────────────────
+  signoz:
+    image: signoz/signoz:v0.124.0
     depends_on:
       clickhouse:
         condition: service_healthy
-      otel-collector:
-        condition: service_started
+      signoz-schema-migrator:
+        condition: service_completed_successfully
     environment:
-      ClickHouseUrl: tcp://admin:27ff0399-0d3a-4bd8-919d-17c2181e6fb9@clickhouse:9000
-      STORAGE: clickhouse
-      GODEBUG: netdns=go
-      TELEMETRY_ENABLED: "false"
-      SIGNOZ_LOCAL_DB_PATH: /var/lib/signoz/signoz.db
+      SIGNOZ_ALERTMANAGER_PROVIDER: signoz
+      SIGNOZ_TELEMETRYSTORE_CLICKHOUSE_DSN: tcp://clickhouse:9000
+      SIGNOZ_SQLSTORE_SQLITE_PATH: /var/lib/signoz/signoz.db
+      SIGNOZ_TOKENIZER_JWT_SECRET: phantom-eye-signoz-2024
     volumes:
-      - ./docker/signoz-db:/var/lib/signoz
-    networks:
-      - signoz-net
-    restart: unless-stopped
-
-  # ── SigNoz Alert Manager ─────────────────────────────────────────────────────
-  alertmanager:
-    image: signoz/alertmanager:0.23.4
-    depends_on:
-      - query-service
-    command:
-      - --queryService.url=http://query-service:8080
-      - --storage.path=/data
-    volumes:
-      - ./docker/alertmanager-data:/data
-    networks:
-      - signoz-net
-    restart: unless-stopped
-
-  # ── SigNoz Frontend (UI) ─────────────────────────────────────────────────────
-  frontend:
-    image: signoz/frontend:0.45.2
-    depends_on:
-      - query-service
-    environment:
-      NGINX_BACKEND_HOST: query-service
-      NGINX_BACKEND_PORT: "8080"
+      - signoz-db:/var/lib/signoz
     ports:
-      - "3301:3301"   # SigNoz UI → http://localhost:3301
+      - "3301:8080"   # SigNoz UI → http://localhost:3301
     networks:
       - signoz-net
     restart: unless-stopped
